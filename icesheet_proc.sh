@@ -16,7 +16,7 @@
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with dem_water.  If not, see <http://www.gnu.org/licenses/>.
+# along with icesheet_proc.sh.  If not, see <http://www.gnu.org/licenses/>.
 #
 #--------------------------------------------------------------------------
 
@@ -25,7 +25,7 @@ OSM_SOURCE="overpass"
 #OSM_SOURCE="path/to/planet.osm"
 
 DB="antarctica_icesheet.db"
-OSM_NOICE="osm_noice_antarctica.osm" 
+OSM_NOICE="osm_noice_antarctica.osm.pbf"
 OGR_SPATIALITE_OPTS="-dsco SPATIALITE=yes -dsco INIT_WITH_EPSG=no"
 SPLIT_SIZE=200000
 
@@ -35,27 +35,32 @@ gen_osmium_js()
 {
 	echo "var areas = Osmium.Output.Shapefile.open('$1', 'polygon');
 areas.add_field('id', 'integer', 12);
+areas.add_field('type', 'string', 30);
 
 Osmium.Callbacks.area = function() {
 
 	if (this.tags.natural == 'bare_rock')
 		areas.add(this.geom, {
-			id:   this.id
+			id:   this.id,
+			type: 'bare_rock'
 		});
 	else if (this.tags.natural == 'scree')
 		areas.add(this.geom, {
-			id:   this.id
+			id:   this.id,
+			type: 'scree'
 		});
 	else if (this.tags.natural == 'water')
 	{
 		if (this.tags.supraglacial != 'yes')
 			areas.add(this.geom, {
-				id:   this.id
+				id:   this.id,
+				type: 'water'
 			});
 	}
 	else if (this.tags.natural == 'glacier')
 		areas.add(this.geom, {
-			id:   this.id
+			id:   this.id,
+			type: 'glacier'
 		});
 }
 
@@ -67,6 +72,10 @@ Osmium.Callbacks.end = function() {
 
 #--------------------------------------------------------------------------
 
+echo "icesheet_proc.sh - Antarctic icesheet processing"
+echo "------------------------------------------------"
+echo ""
+
 if [ -r "$DB" ] ; then
 	echo "$DB already exists - delete it if you want to recreate it."
 	exit
@@ -76,11 +85,24 @@ if [ ! -z "$1" ] ; then
 	OSM_SOURCE="$1"
 fi
 
+
+if [ -z "$OSMIUM_NOICE" ] ; then
+	OSMIUM_NOICE=`which osmium_noice 2> /dev/null`
+	if [ -z "$OSMIUM_NOICE" ] ; then
+		OSMIUM_NOICE="`dirname $0`/osmium_noice"
+		if [ ! -x "$OSMIUM_NOICE" ] ; then
+			OSMIUM_NOICE=
+		fi
+	fi
+fi
+
+OSM_NOICE_BASE=`basename "$OSM_NOICE" .osm.pbf`
+
 SSTART=`date +%s`
 
 # ===== coastline source data =====
 
-SOURCE_DB=`find . -maxdepth 1 -name "*.sqlite" -o -name "*.db" | head -n 1`
+SOURCE_DB=`find . -maxdepth 1 -name "*.sqlite" -o -name "*.db" ! -name "$OSM_NOICE_BASE.db" | head -n 1`
 
 if [ ! -z "$SOURCE_DB" ] ; then
 
@@ -89,7 +111,7 @@ if [ ! -z "$SOURCE_DB" ] ; then
 	SOURCE_DB=`basename "$SOURCE_DB"`
 
 	echo "Extracting needed data from coastline db..."
-	ogr2ogr -f "SQLite" -s_srs "EPSG:3857" -t_srs "EPSG:3857" -skipfailures -spat -20037508.342789244 -20037508.342789244 20037508.342789244 -8300000 "$DB" "$SOURCE_DB" $OGR_SPATIALITE_OPTS
+	ogr2ogr -f "SQLite" -gt 65535 --config OGR_SQLITE_SYNCHRONOUS OFF -s_srs "EPSG:3857" -t_srs "EPSG:3857" -skipfailures -spat -20037508.342789244 -20037508.342789244 20037508.342789244 -8300000 "$DB" "$SOURCE_DB" $OGR_SPATIALITE_OPTS
 
 else
 
@@ -140,7 +162,13 @@ fi
 
 # ===== non-icesheet source data =====
 
-OSM_NOICE_BASE=`basename "$OSM_NOICE" .osm`
+if [ -r "$OSM_NOICE" ] ; then
+	if [ -r "$OSM_SOURCE" ] ; then
+		if [ "$OSM_SOURCE" -nt "$OSM_NOICE" ] ; then
+			rm -f "$OSM_NOICE"
+		fi
+	fi
+fi
 
 if [ ! -r "$OSM_NOICE" ] ; then
 
@@ -159,26 +187,44 @@ if [ ! -r "$OSM_NOICE" ] ; then
 	elif [ -r "$OSM_SOURCE" ] ; then
 
 		echo "Extracting antarctica data from $OSM_SOURCE..."
-		osmconvert "$OSM_SOURCE" -b=-180,-90,180,-60 -o="$OSM_NOICE"
+		osmconvert "$OSM_SOURCE" --out-pbf -b=-180,-90,180,-60 -o="$OSM_NOICE"
 
 	else
 		echo "'$OSM_SOURCE' could not be read - specify a different source for OSM data."
 		exit
 	fi
 
-	if [ -r "$OSM_NOICE_BASE.shp" ] ; then
-		if [ "$OSM_NOICE" -nt "$OSM_NOICE_BASE.shp" ] ; then
-			rm -f "$OSM_NOICE_BASE.shp"
-		fi
-	fi
+fi
 
-	if [ ! -r "$OSM_NOICE_BASE.shp" ] ; then
-		rm -f "$OSM_NOICE_BASE.shp" "$OSM_NOICE_BASE.shx" "$OSM_NOICE_BASE.dbf" "$OSM_NOICE_BASE.prj" "$OSM_NOICE_BASE.cpg"
+if [ -r "$OSM_NOICE_BASE.shp" ] ; then
+	if [ "$OSM_NOICE" -nt "$OSM_NOICE_BASE.shp" ] ; then
+		rm -f "$OSM_NOICE_BASE.shp"
+	fi
+fi
+
+if [ -r "$OSM_NOICE_BASE.db" ] ; then
+	if [ "$OSM_NOICE" -nt "$OSM_NOICE_BASE.db" ] ; then
+		rm -f "$OSM_NOICE_BASE.db"
+	fi
+fi
+
+if [ ! -r "$OSM_NOICE_BASE.db" ] && [ ! -r "$OSM_NOICE_BASE.shp" ] ; then
+	rm -f "$OSM_NOICE_BASE.shp" "$OSM_NOICE_BASE.shx" "$OSM_NOICE_BASE.dbf" "$OSM_NOICE_BASE.prj" "$OSM_NOICE_BASE.cpg" "$OSM_NOICE_BASE.db"
+	if [ -z "$OSMIUM_NOICE" ] ; then
+		echo "Converting OSM data with osmjs..."
 		gen_osmium_js "$OSM_NOICE_BASE" "noice.js"
 		osmjs -m -2 -l sparsetable -j "noice.js" "$OSM_NOICE"
 		rm -f "noice.js"
+	else
+		echo "Converting OSM data with osmium_noice..."
+		$OSMIUM_NOICE "$OSM_NOICE" "$OSM_NOICE_BASE.db"
 	fi
+fi
 
+if [ -r "$OSM_NOICE_BASE.db" ] ; then
+	OSM_NOICE_SOURCE="$OSM_NOICE_BASE.db"
+else
+	OSM_NOICE_SOURCE="$OSM_NOICE_BASE.shp"
 fi
 
 SEND_DL=`date +%s`
@@ -186,7 +232,7 @@ SEND_DL=`date +%s`
 # ===== processing =====
 
 echo "Adding non-icesheet data to db..."
-ogr2ogr --config OGR_SQLITE_SYNCHRONOUS OFF -f "SQLite" -gt 65535 -s_srs "EPSG:4326" -t_srs "EPSG:3857" -skipfailures -explodecollections -spat -180 -85.05113 180 -60 -update -append "$DB" "$OSM_NOICE_BASE.shp" -nln "noice" -nlt "POLYGON"
+ogr2ogr --config OGR_SQLITE_SYNCHRONOUS OFF -f "SQLite" -gt 65535 -s_srs "EPSG:4326" -t_srs "EPSG:3857" -skipfailures -explodecollections -spat -180 -85.05113 180 -60 -update -append "$DB" "$OSM_NOICE_SOURCE" -nln "noice" -nlt "POLYGON"
 
 echo "Running spatialite processing (first part)..."
 
@@ -194,8 +240,11 @@ echo "CREATE TABLE ice ( OGC_FID INTEGER PRIMARY KEY AUTOINCREMENT );
 SELECT AddGeometryColumn('ice', 'GEOMETRY', 3857, 'MULTIPOLYGON', 'XY');
 SELECT CreateSpatialIndex('ice', 'GEOMETRY');
 INSERT INTO ice (OGC_FID, GEOMETRY) SELECT land_polygons.OGC_FID, CastToMultiPolygon(land_polygons.GEOMETRY) FROM land_polygons;
-REPLACE INTO ice (OGC_FID, GEOMETRY) SELECT ice.OGC_FID, CastToMultiPolygon(ST_Difference(ice.GEOMETRY, ST_Union(noice.GEOMETRY))) FROM ice JOIN noice ON (ST_Intersects(ice.GEOMETRY, noice.GEOMETRY) AND noice.OGC_FID IN (SELECT pkid FROM idx_noice_GEOMETRY WHERE pkid MATCH RTreeIntersects(MbrMinX(ice.GEOMETRY), MbrMinY(ice.GEOMETRY), MbrMaxX(ice.GEOMETRY), MbrMaxY(ice.GEOMETRY)))) GROUP BY ice.OGC_FID;
-DELETE FROM ice WHERE ST_Area(GEOMETRY) < 0.1 OR GEOMETRY IS NULL;VACUUM;
+REPLACE INTO ice (OGC_FID, GEOMETRY) SELECT ice.OGC_FID, CastToMultiPolygon(ST_Difference(ice.GEOMETRY, ST_Union(noice.GEOMETRY))) FROM ice JOIN noice ON (ST_Intersects(ice.GEOMETRY, noice.GEOMETRY) AND noice.OGC_FID IN (SELECT ROWID FROM SpatialIndex WHERE f_table_name = 'noice' AND search_frame = ice.GEOMETRY)) GROUP BY ice.OGC_FID;
+.elemgeo ice GEOMETRY ice_split id_new id_old;
+DELETE FROM ice;
+INSERT INTO ice (GEOMETRY) SELECT CastToMultiPolygon(ice_split.GEOMETRY) FROM ice_split WHERE ST_Area(GEOMETRY) > 0.1;
+SELECT DiscardGeometryColumn('ice_split', 'GEOMETRY');DROP TABLE ice_split;VACUUM;
 CREATE TABLE noice_outline ( OGC_FID INTEGER PRIMARY KEY AUTOINCREMENT, oid INTEGER, iteration INTEGER );
 SELECT AddGeometryColumn('noice_outline', 'GEOMETRY', 3857, 'MULTILINESTRING', 'XY');
 SELECT CreateSpatialIndex('noice_outline', 'GEOMETRY');
@@ -228,14 +277,19 @@ echo "DELETE FROM noice_outline WHERE ST_Length(noice_outline.GEOMETRY) > $SPLIT
 CREATE TABLE ice_outline ( OGC_FID INTEGER PRIMARY KEY AUTOINCREMENT, type INTEGER );
 SELECT AddGeometryColumn('ice_outline', 'GEOMETRY', 3857, 'MULTILINESTRING', 'XY');
 SELECT CreateSpatialIndex('ice_outline', 'GEOMETRY');
+CREATE TABLE ice_outline2 ( OGC_FID INTEGER PRIMARY KEY AUTOINCREMENT, type INTEGER );
+SELECT AddGeometryColumn('ice_outline2', 'GEOMETRY', 3857, 'MULTILINESTRING', 'XY');
+SELECT CreateSpatialIndex('ice_outline2', 'GEOMETRY');
 UPDATE water_polygons SET GEOMETRY = ST_Buffer(GEOMETRY,0.01);
-REPLACE INTO noice_outline (OGC_FID, oid, GEOMETRY) SELECT noice_outline.OGC_FID, noice_outline.oid, CastToMultiLineString(ST_Difference(noice_outline.GEOMETRY, ST_Union(water_polygons.GEOMETRY))) FROM noice_outline JOIN water_polygons ON (ST_Intersects(noice_outline.GEOMETRY, water_polygons.GEOMETRY) AND water_polygons.OGC_FID IN (SELECT pkid FROM idx_water_polygons_GEOMETRY WHERE pkid MATCH RTreeIntersects(MbrMinX(noice_outline.GEOMETRY), MbrMinY(noice_outline.GEOMETRY), MbrMaxX(noice_outline.GEOMETRY), MbrMaxY(noice_outline.GEOMETRY)))) GROUP BY noice_outline.OGC_FID;
-REPLACE INTO noice_outline (OGC_FID, oid, GEOMETRY) SELECT noice_outline.OGC_FID, noice_outline.oid, CastToMultiLineString(ST_Difference(noice_outline.GEOMETRY, ST_Union(noice.GEOMETRY))) FROM noice_outline JOIN noice ON (ST_Intersects(noice_outline.GEOMETRY, noice.GEOMETRY) AND noice.OGC_FID IN (SELECT pkid FROM idx_noice_GEOMETRY WHERE pkid MATCH RTreeIntersects(MbrMinX(noice_outline.GEOMETRY), MbrMinY(noice_outline.GEOMETRY), MbrMaxX(noice_outline.GEOMETRY), MbrMaxY(noice_outline.GEOMETRY))) AND noice.OGC_FID <> noice_outline.oid) GROUP BY noice_outline.OGC_FID;
+REPLACE INTO noice_outline (OGC_FID, oid, GEOMETRY) SELECT noice_outline.OGC_FID, noice_outline.oid, CastToMultiLineString(ST_Difference(noice_outline.GEOMETRY, ST_Union(water_polygons.GEOMETRY))) FROM noice_outline JOIN water_polygons ON (ST_Intersects(noice_outline.GEOMETRY, water_polygons.GEOMETRY) AND water_polygons.OGC_FID IN (SELECT ROWID FROM SpatialIndex WHERE f_table_name = 'water_polygons' AND search_frame = noice_outline.GEOMETRY)) GROUP BY noice_outline.OGC_FID;
+REPLACE INTO noice_outline (OGC_FID, oid, GEOMETRY) SELECT noice_outline.OGC_FID, noice_outline.oid, CastToMultiLineString(ST_Difference(noice_outline.GEOMETRY, ST_Union(noice.GEOMETRY))) FROM noice_outline JOIN noice ON (ST_Intersects(noice_outline.GEOMETRY, noice.GEOMETRY) AND noice.OGC_FID IN (SELECT ROWID FROM SpatialIndex WHERE f_table_name = 'noice' AND search_frame = noice_outline.GEOMETRY) AND noice.OGC_FID <> noice_outline.oid) GROUP BY noice_outline.OGC_FID;
 DELETE FROM noice_outline WHERE ST_Length(GEOMETRY) < 0.01 OR GEOMETRY IS NULL;
 DELETE FROM ice_outline;
 INSERT INTO ice_outline (OGC_FID, type, GEOMETRY) SELECT lines.OGC_FID, 1, CastToMultiLineString(lines.GEOMETRY) FROM lines;
-REPLACE INTO ice_outline (OGC_FID, type, GEOMETRY) SELECT ice_outline.OGC_FID, 1, CastToMultiLineString(ST_Difference(ice_outline.GEOMETRY, ST_Union(noice.GEOMETRY))) FROM ice_outline JOIN noice ON (ST_Intersects(ice_outline.GEOMETRY, noice.GEOMETRY) AND noice.OGC_FID IN (SELECT pkid FROM idx_noice_GEOMETRY WHERE pkid MATCH RTreeIntersects(MbrMinX(ice_outline.GEOMETRY), MbrMinY(ice_outline.GEOMETRY), MbrMaxX(ice_outline.GEOMETRY), MbrMaxY(ice_outline.GEOMETRY)))) GROUP BY ice_outline.OGC_FID;
+REPLACE INTO ice_outline (OGC_FID, type, GEOMETRY) SELECT ice_outline.OGC_FID, 1, CastToMultiLineString(ST_Difference(ice_outline.GEOMETRY, ST_Union(ST_Buffer(noice.GEOMETRY, 0.01)))) FROM ice_outline JOIN noice ON (ST_Intersects(ice_outline.GEOMETRY, noice.GEOMETRY) AND noice.OGC_FID IN (SELECT ROWID FROM SpatialIndex WHERE f_table_name = 'noice' AND search_frame = ST_Buffer(ice_outline.GEOMETRY, 0.01))) GROUP BY ice_outline.OGC_FID;
 INSERT INTO ice_outline (type, GEOMETRY) SELECT 2, noice_outline.GEOMETRY FROM noice_outline;
+INSERT INTO ice_outline2 (OGC_FID, type, GEOMETRY) SELECT OGC_FID, type, GEOMETRY FROM ice_outline;
+REPLACE INTO ice_outline2 (OGC_FID, type, GEOMETRY) SELECT ice_outline2.OGC_FID, 1, CastToMultiLineString(ST_Difference(ice_outline2.GEOMETRY, ST_Union(ST_Buffer(noice.GEOMETRY, 0.01)))) FROM ice_outline2 JOIN noice ON (ST_Intersects(ice_outline2.GEOMETRY, noice.GEOMETRY) AND noice.OGC_FID IN (SELECT ROWID FROM SpatialIndex WHERE f_table_name = 'noice' AND search_frame = ST_Buffer(ice_outline2.GEOMETRY, 0.01)) AND noice.type = 'glacier') GROUP BY ice_outline2.OGC_FID;
 .elemgeo ice_outline GEOMETRY ice_outline_flat id_new id_old;
 DELETE FROM ice_outline;
 SELECT DisableSpatialIndex('ice_outline', 'GEOMETRY');
@@ -244,19 +298,29 @@ SELECT DiscardGeometryColumn('ice_outline', 'GEOMETRY');
 SELECT RecoverGeometryColumn('ice_outline', 'GEOMETRY', 3857, 'LINESTRING', 'XY');
 SELECT CreateSpatialIndex('ice_outline', 'GEOMETRY');
 INSERT INTO ice_outline (type, GEOMETRY) SELECT ice_outline_flat.type, ice_outline_flat.GEOMETRY FROM ice_outline_flat WHERE ST_Length(GEOMETRY) > 0.01;
-SELECT DiscardGeometryColumn('ice_outline_flat', 'GEOMETRY');DROP TABLE ice_outline_flat;" | spatialite -batch -bail -echo "$DB"
+.elemgeo ice_outline2 GEOMETRY ice_outline2_flat id_new id_old;
+DELETE FROM ice_outline2;
+SELECT DisableSpatialIndex('ice_outline2', 'GEOMETRY');
+DROP TABLE idx_ice_outline2_GEOMETRY;
+SELECT DiscardGeometryColumn('ice_outline2', 'GEOMETRY');
+SELECT RecoverGeometryColumn('ice_outline2', 'GEOMETRY', 3857, 'LINESTRING', 'XY');
+SELECT CreateSpatialIndex('ice_outline2', 'GEOMETRY');
+INSERT INTO ice_outline2 (type, GEOMETRY) SELECT ice_outline2_flat.type, ice_outline2_flat.GEOMETRY FROM ice_outline2_flat WHERE ST_Length(GEOMETRY) > 0.01;
+SELECT DiscardGeometryColumn('ice_outline_flat', 'GEOMETRY');DROP TABLE ice_outline_flat;
+SELECT DiscardGeometryColumn('ice_outline2_flat', 'GEOMETRY');DROP TABLE ice_outline2_flat;VACUUM;" | spatialite -batch -bail -echo "$DB"
 
-rm -rf "antarctica_icesheet"
-mkdir "antarctica_icesheet"
+rm -rf "antarctica-icesheet-outlines-3857"
+mkdir "antarctica-icesheet-outlines-3857"
+rm -rf "antarctica-icesheet-outlines-ext-3857"
+mkdir "antarctica-icesheet-outlines-ext-3857"
+rm -rf "antarctica-icesheet-polygons-3857"
+mkdir "antarctica-icesheet-polygons-3857"
 
 echo "Converting results to shapefiles..."
 
-ogr2ogr -s_srs "EPSG:3857" -t_srs "EPSG:3857" -skipfailures -explodecollections -spat -20037508.342789244 -20037508.342789244 20037508.342789244 -8300000 -clipsrc spat_extent "antarctica_icesheet/antarctica_icesheet_polygons_3857.shp" "$DB" "ice" -nln "ice" -nlt "POLYGON"
-ogr2ogr -s_srs "EPSG:3857" -t_srs "EPSG:3857" -skipfailures -spat -20037508.342789244 -20037508.342789244 20037508.342789244 -8300000 -clipsrc spat_extent "antarctica_icesheet/antarctica_icesheet_outlines_3857.shp" "$DB" "ice_outline" -nln "ice_outline" -nlt "LINESTRING"
-
-#cp readme.txt antarctica_icesheet/
-#zip -9 "antarctica_icesheet_outlines_3857.zip" antarctica_icesheet/antarctica_icesheet_outlines_3857.* antarctica_icesheet/readme.txt
-#zip -9 "antarctica_icesheet_polygons_3857.zip" antarctica_icesheet/antarctica_icesheet_polygons_3857.* antarctica_icesheet/readme.txt
+ogr2ogr -s_srs "EPSG:3857" -t_srs "EPSG:3857" -skipfailures -explodecollections -spat -20037508.342789244 -20037508.342789244 20037508.342789244 -8300000 -clipsrc spat_extent "antarctica-icesheet-polygons-3857/icesheet_polygons.shp" "$DB" "ice" -nln "icesheet_polygons" -nlt "POLYGON"
+ogr2ogr -s_srs "EPSG:3857" -t_srs "EPSG:3857" -skipfailures -explodecollections -spat -20037508.342789244 -20037508.342789244 20037508.342789244 -8300000 -clipsrc spat_extent "antarctica-icesheet-outlines-3857/icesheet_outlines.shp" "$DB" "ice_outline" -nln "icesheet_outlines" -nlt "LINESTRING"
+ogr2ogr -s_srs "EPSG:3857" -t_srs "EPSG:3857" -skipfailures -explodecollections -spat -20037508.342789244 -20037508.342789244 20037508.342789244 -8300000 -clipsrc spat_extent "antarctica-icesheet-outlines-ext-3857/icesheet_outlines.shp" "$DB" "ice_outline2" -nln "icesheet_outlines" -nlt "LINESTRING"
 
 SEND=`date +%s`
 
