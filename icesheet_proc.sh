@@ -236,7 +236,11 @@ ogr2ogr --config OGR_SQLITE_SYNCHRONOUS OFF -f "SQLite" -gt 65535 -s_srs "EPSG:4
 
 echo "Running spatialite processing (first part)..."
 
-echo "CREATE TABLE ice ( OGC_FID INTEGER PRIMARY KEY AUTOINCREMENT );
+echo "PRAGMA journal_mode = OFF;
+PRAGMA synchronous = OFF;
+PRAGMA temp_store = MEMORY;
+PRAGMA cache_size = 5000000;
+CREATE TABLE ice ( OGC_FID INTEGER PRIMARY KEY AUTOINCREMENT );
 SELECT AddGeometryColumn('ice', 'GEOMETRY', 3857, 'MULTIPOLYGON', 'XY');
 SELECT CreateSpatialIndex('ice', 'GEOMETRY');
 INSERT INTO ice (OGC_FID, GEOMETRY) SELECT land_polygons.OGC_FID, CastToMultiPolygon(land_polygons.GEOMETRY) FROM land_polygons;
@@ -261,9 +265,13 @@ echo "Iterating outline splitting..."
 CNT=1
 XCNT=1
 while [ $XCNT -gt 0 ] ; do
-	echo "INSERT INTO noice_outline (oid, iteration, GEOMETRY) SELECT noice_outline.oid, ($CNT + 1), CastToMultiLineString(ST_Line_Substring(noice_outline.GEOMETRY, 0.0, 0.5)) FROM noice_outline WHERE ST_Length(noice_outline.GEOMETRY) > $SPLIT_SIZE AND noice_outline.iteration = $CNT;
+	echo "PRAGMA journal_mode = OFF;
+PRAGMA synchronous = OFF;
+PRAGMA temp_store = MEMORY;
+PRAGMA cache_size = 5000000;
+INSERT INTO noice_outline (oid, iteration, GEOMETRY) SELECT noice_outline.oid, ($CNT + 1), CastToMultiLineString(ST_Line_Substring(noice_outline.GEOMETRY, 0.0, 0.5)) FROM noice_outline WHERE ST_Length(noice_outline.GEOMETRY) > $SPLIT_SIZE AND noice_outline.iteration = $CNT;
 INSERT INTO noice_outline (oid, iteration, GEOMETRY) SELECT noice_outline.oid, ($CNT + 1), CastToMultiLineString(ST_Line_Substring(noice_outline.GEOMETRY, 0.5, 1.0)) FROM noice_outline WHERE ST_Length(noice_outline.GEOMETRY) > $SPLIT_SIZE AND noice_outline.iteration = $CNT;
-SELECT COUNT(*) FROM noice_outline WHERE ST_Length(noice_outline.GEOMETRY) > $SPLIT_SIZE AND noice_outline.iteration = ($CNT + 1);" | spatialite -batch -bail -echo "$DB" > "cnt.txt"
+SELECT COUNT(*) FROM noice_outline WHERE ST_Length(noice_outline.GEOMETRY) > $SPLIT_SIZE AND noice_outline.iteration = ($CNT + 1);" | spatialite -batch -bail -echo "$DB" | tail -n 1 > "cnt.txt"
 	XCNT=`cat cnt.txt | xargs`
 	echo "--- iteration $CNT ($XCNT) ---"
 	CNT=`expr $CNT + 1`
@@ -273,7 +281,11 @@ rm -f "cnt.txt"
 
 echo "Running spatialite processing (second part)..."
 
-echo "DELETE FROM noice_outline WHERE ST_Length(noice_outline.GEOMETRY) > $SPLIT_SIZE;VACUUM;
+echo "PRAGMA journal_mode = OFF;
+PRAGMA synchronous = OFF;
+PRAGMA temp_store = MEMORY;
+PRAGMA cache_size = 5000000;
+DELETE FROM noice_outline WHERE ST_Length(noice_outline.GEOMETRY) > $SPLIT_SIZE;VACUUM;
 CREATE TABLE ice_outline ( OGC_FID INTEGER PRIMARY KEY AUTOINCREMENT, type INTEGER );
 SELECT AddGeometryColumn('ice_outline', 'GEOMETRY', 3857, 'MULTILINESTRING', 'XY');
 SELECT CreateSpatialIndex('ice_outline', 'GEOMETRY');

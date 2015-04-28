@@ -39,6 +39,9 @@ class MyOGRHandler : public osmium::handler::Handler {
     OGRDataSource* m_data_source;
     OGRLayer* m_layer_polygon;
 
+    size_t feature_count_noice;
+    size_t feature_count_glacier;
+
     // Choose one of the following:
 
     // 1. Use WGS84, do not project coordinates.
@@ -99,19 +102,25 @@ public:
         }
 
         m_layer_polygon->StartTransaction();
+
+        feature_count_noice = 0;
+        feature_count_glacier = 0;
     }
 
     ~MyOGRHandler() {
         m_layer_polygon->CommitTransaction();
         OGRDataSource::DestroyDataSource(m_data_source);
         OGRCleanupAll();
+
+        std::cout << "noice features converted: " << feature_count_noice << "\n";
+        std::cout << "glacier features converted: " << feature_count_glacier << "\n";
     }
-    
+
     void area(const osmium::Area& area) {
         const char* natural = area.tags()["natural"];
         if (natural) {
-	  if (!strcmp(natural, "bare_rock") || 
-	    !strcmp(natural, "scree") || 
+	  if (!strcmp(natural, "bare_rock") ||
+	    !strcmp(natural, "scree") ||
 	    !strcmp(natural, "glacier") ||
 	    !strcmp(natural, "water"))
 	  {
@@ -121,19 +130,24 @@ public:
 	      if (supraglacial)
 		if (!strcmp(supraglacial, "yes")) return;
 	    }
-	    
+
             try {
                 std::unique_ptr<OGRMultiPolygon> ogr_polygon = m_factory.create_multipolygon(area);
                 OGRFeature* feature = OGRFeature::CreateFeature(m_layer_polygon->GetLayerDefn());
                 feature->SetGeometry(ogr_polygon.get());
                 feature->SetField("id", static_cast<int>(area.id()));
-		
+
                 feature->SetField("type", natural);
 
                 if (m_layer_polygon->CreateFeature(feature) != OGRERR_NONE) {
                     std::cerr << "Failed to create feature.\n";
                     exit(1);
                 }
+
+                if (!strcmp(natural, "glacier"))
+                    feature_count_glacier++;
+                else
+                    feature_count_noice++;
 
                 OGRFeature::DestroyFeature(feature);
             } catch (osmium::geometry_error&) {
