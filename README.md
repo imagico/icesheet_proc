@@ -20,11 +20,10 @@ If you do not have osmjs installed (which relies on the old osmium library which
 Generated files
 ---------------
 
-The script generates three shapefiles in web mercator (EPSG:3857) projection:
+The script generates two shapefiles in web mercator (EPSG:3857) projection:
 
 * polygons of the ice covered area in Antarctica that is not explicitly mapped with areas tagged `natural=glacier`.  These polygons are split into smaller pieces in the same way the land polygons from OSMCoastline are split.
-* outlines of the ice area above split into handy linestrings.
-* a separate file with only the outlines towards non-glaciated areas, i.e. the external outlines of the icesheet polygons.  This is for rendering glacier outlines but avoiding double lines where the icesheet polygons touch explicitly mapped glaciers, in particular the ice shelves.
+* outlines of the ice area above split into handy linestrings.  These have an additionl `type` attribute.  `type 1` indicates outlines separating ice from ocean, i.e. ice coastlines, `type 2` are edges of ice covered areas towards ice free land and `type 3` are edges between ice covered areas not explicitly mapped and ice explicitly mapped as glaciers in OSM.
 
 Dependencies
 ------------
