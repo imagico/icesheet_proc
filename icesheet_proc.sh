@@ -29,6 +29,15 @@ OSM_NOICE="osm_noice_antarctica.osm.pbf"
 OGR_SPATIALITE_OPTS="-dsco SPATIALITE=yes -dsco INIT_WITH_EPSG=no"
 SPLIT_SIZE=200000
 
+EDGE_TYPE_ATTRIBUTE=ice_edge
+EDGE_TYPE_ICE_OCEAN=ice_ocean
+EDGE_TYPE_ICE_LAND=ice_land
+EDGE_TYPE_ICE_ICE=ice_ice
+
+if [ -z "$COASTLINE_LAYER" ] ; then
+	COASTLINE_LAYER=lines
+fi
+
 #--------------------------------------------------------------------------
 
 gen_osmium_js()
@@ -143,20 +152,20 @@ else
 				"water-polygons-split-3857/water_polygons.cpg"
 	fi
 
-	if [ ! -r "coastlines-split-3857/lines.shp" ] || [ "coastlines-split-3857.zip" -nt "coastlines-split-3857/lines.shp" ] ; then
+	if [ ! -r "coastlines-split-3857/$COASTLINE_LAYER.shp" ] || [ "coastlines-split-3857.zip" -nt "coastlines-split-3857/$COASTLINE_LAYER.shp" ] ; then
 		unzip -quo "coastlines-split-3857.zip" \
-				"coastlines-split-3857/lines.shp" \
-				"coastlines-split-3857/lines.shx" \
-				"coastlines-split-3857/lines.prj" \
-				"coastlines-split-3857/lines.dbf" \
-				"coastlines-split-3857/lines.cpg"
+				"coastlines-split-3857/$COASTLINE_LAYER.shp" \
+				"coastlines-split-3857/$COASTLINE_LAYER.shx" \
+				"coastlines-split-3857/$COASTLINE_LAYER.prj" \
+				"coastlines-split-3857/$COASTLINE_LAYER.dbf" \
+				"coastlines-split-3857/$COASTLINE_LAYER.cpg"
 	fi
 
 	echo "Adding coastline data to db..."
 
 	ogr2ogr --config OGR_SQLITE_SYNCHRONOUS OFF -f "SQLite" -gt 65535 -s_srs "EPSG:3857" -t_srs "EPSG:3857" -skipfailures -spat -20037508.342789244 -20037508.342789244 20037508.342789244 -8300000 "$DB" "land-polygons-split-3857/land_polygons.shp" -nln "land_polygons" -nlt "POLYGON" $OGR_SPATIALITE_OPTS
 	ogr2ogr --config OGR_SQLITE_SYNCHRONOUS OFF -f "SQLite" -gt 65535 -s_srs "EPSG:3857" -t_srs "EPSG:3857" -update -append -skipfailures -spat -20037508.342789244 -20037508.342789244 20037508.342789244 -8300000 "$DB" "water-polygons-split-3857/water_polygons.shp" -nln "water_polygons" -nlt "POLYGON"
-	ogr2ogr --config OGR_SQLITE_SYNCHRONOUS OFF -f "SQLite" -gt 65535 -s_srs "EPSG:3857" -t_srs "EPSG:3857" -update -append -skipfailures -spat -20037508.342789244 -20037508.342789244 20037508.342789244 -8300000 "$DB" "coastlines-split-3857/lines.shp" -nln "lines" -nlt "LINESTRING"
+	ogr2ogr --config OGR_SQLITE_SYNCHRONOUS OFF -f "SQLite" -gt 65535 -s_srs "EPSG:3857" -t_srs "EPSG:3857" -update -append -skipfailures -spat -20037508.342789244 -20037508.342789244 20037508.342789244 -8300000 "$DB" "coastlines-split-3857/$COASTLINE_LAYER.shp" -nln "$COASTLINE_LAYER" -nlt "LINESTRING"
 
 fi
 
@@ -274,10 +283,10 @@ rm -f "cnt.txt"
 echo "Running spatialite processing (second part)..."
 
 echo "DELETE FROM noice_outline WHERE ST_Length(noice_outline.GEOMETRY) > $SPLIT_SIZE;VACUUM;
-CREATE TABLE ice_outline ( OGC_FID INTEGER PRIMARY KEY AUTOINCREMENT, type INTEGER );
+CREATE TABLE ice_outline ( OGC_FID INTEGER PRIMARY KEY AUTOINCREMENT, $EDGE_TYPE_ATTRIBUTE TEXT );
 SELECT AddGeometryColumn('ice_outline', 'GEOMETRY', 3857, 'MULTILINESTRING', 'XY');
 SELECT CreateSpatialIndex('ice_outline', 'GEOMETRY');
-CREATE TABLE ice_outline2 ( OGC_FID INTEGER PRIMARY KEY AUTOINCREMENT, type INTEGER );
+CREATE TABLE ice_outline2 ( OGC_FID INTEGER PRIMARY KEY AUTOINCREMENT, $EDGE_TYPE_ATTRIBUTE TEXT );
 SELECT AddGeometryColumn('ice_outline2', 'GEOMETRY', 3857, 'MULTILINESTRING', 'XY');
 SELECT CreateSpatialIndex('ice_outline2', 'GEOMETRY');
 UPDATE water_polygons SET GEOMETRY = ST_Buffer(GEOMETRY,0.01);
@@ -286,15 +295,15 @@ SELECT 'step 1';
 REPLACE INTO noice_outline (OGC_FID, oid, GEOMETRY) SELECT noice_outline.OGC_FID, noice_outline.oid, CastToMultiLineString(ST_Difference(noice_outline.GEOMETRY, ST_Union(noice.GEOMETRY))) FROM noice_outline JOIN noice ON (ST_Intersects(noice_outline.GEOMETRY, noice.GEOMETRY) AND noice.OGC_FID IN (SELECT ROWID FROM SpatialIndex WHERE f_table_name = 'noice' AND search_frame = noice_outline.GEOMETRY) AND noice.OGC_FID <> noice_outline.oid) GROUP BY noice_outline.OGC_FID;
 DELETE FROM noice_outline WHERE ST_Length(GEOMETRY) < 0.01 OR GEOMETRY IS NULL;
 DELETE FROM ice_outline;
-INSERT INTO ice_outline (OGC_FID, type, GEOMETRY) SELECT lines.OGC_FID, 1, CastToMultiLineString(lines.GEOMETRY) FROM lines;
+INSERT INTO ice_outline (OGC_FID, $EDGE_TYPE_ATTRIBUTE, GEOMETRY) SELECT $COASTLINE_LAYER.OGC_FID, '$EDGE_TYPE_ICE_OCEAN', CastToMultiLineString($COASTLINE_LAYER.GEOMETRY) FROM $COASTLINE_LAYER;
 SELECT 'step 2';
-REPLACE INTO ice_outline (OGC_FID, type, GEOMETRY) SELECT ice_outline.OGC_FID, 1, CastToMultiLineString(ST_Difference(ice_outline.GEOMETRY, ST_Union(ST_Buffer(noice.GEOMETRY, 0.01)))) FROM ice_outline JOIN noice ON (ST_Intersects(ice_outline.GEOMETRY, noice.GEOMETRY) AND noice.OGC_FID IN (SELECT ROWID FROM SpatialIndex WHERE f_table_name = 'noice' AND search_frame = ST_Buffer(ice_outline.GEOMETRY, 0.01))) GROUP BY ice_outline.OGC_FID;
-INSERT INTO ice_outline (type, GEOMETRY) SELECT 2, noice_outline.GEOMETRY FROM noice_outline;
-INSERT INTO ice_outline2 (OGC_FID, type, GEOMETRY) SELECT OGC_FID, type, GEOMETRY FROM ice_outline;
+REPLACE INTO ice_outline (OGC_FID, $EDGE_TYPE_ATTRIBUTE, GEOMETRY) SELECT ice_outline.OGC_FID, '$EDGE_TYPE_ICE_OCEAN', CastToMultiLineString(ST_Difference(ice_outline.GEOMETRY, ST_Union(ST_Buffer(noice.GEOMETRY, 0.01)))) FROM ice_outline JOIN noice ON (ST_Intersects(ice_outline.GEOMETRY, noice.GEOMETRY) AND noice.OGC_FID IN (SELECT ROWID FROM SpatialIndex WHERE f_table_name = 'noice' AND search_frame = ST_Buffer(ice_outline.GEOMETRY, 0.01))) GROUP BY ice_outline.OGC_FID;
+INSERT INTO ice_outline ($EDGE_TYPE_ATTRIBUTE, GEOMETRY) SELECT '$EDGE_TYPE_ICE_LAND', noice_outline.GEOMETRY FROM noice_outline;
+INSERT INTO ice_outline2 (OGC_FID, $EDGE_TYPE_ATTRIBUTE, GEOMETRY) SELECT OGC_FID, $EDGE_TYPE_ATTRIBUTE, GEOMETRY FROM ice_outline;
 SELECT 'step 3';
-REPLACE INTO ice_outline2 (OGC_FID, type, GEOMETRY) SELECT ice_outline2.OGC_FID, 2, CastToMultiLineString(ST_Difference(ice_outline2.GEOMETRY, ST_Union(ST_Buffer(noice.GEOMETRY, 0.01)))) FROM ice_outline2 JOIN noice ON (ST_Intersects(ice_outline2.GEOMETRY, noice.GEOMETRY) AND noice.OGC_FID IN (SELECT ROWID FROM SpatialIndex WHERE f_table_name = 'noice' AND search_frame = ST_Buffer(ice_outline2.GEOMETRY, 0.01)) AND noice.type = 'glacier') GROUP BY ice_outline2.OGC_FID;
+REPLACE INTO ice_outline2 (OGC_FID, $EDGE_TYPE_ATTRIBUTE, GEOMETRY) SELECT ice_outline2.OGC_FID, '$EDGE_TYPE_ICE_LAND', CastToMultiLineString(ST_Difference(ice_outline2.GEOMETRY, ST_Union(ST_Buffer(noice.GEOMETRY, 0.01)))) FROM ice_outline2 JOIN noice ON (ST_Intersects(ice_outline2.GEOMETRY, noice.GEOMETRY) AND noice.OGC_FID IN (SELECT ROWID FROM SpatialIndex WHERE f_table_name = 'noice' AND search_frame = ST_Buffer(ice_outline2.GEOMETRY, 0.01)) AND noice.type = 'glacier') GROUP BY ice_outline2.OGC_FID;
 SELECT 'step 4';
-INSERT INTO ice_outline2 (type, GEOMETRY) SELECT 3, CastToMultiLineString(ST_Intersection(ice_outline.GEOMETRY, ST_Union(ST_Buffer(noice.GEOMETRY, 0.01)))) FROM ice_outline JOIN noice ON (ST_Intersects(ice_outline.GEOMETRY, noice.GEOMETRY) AND noice.OGC_FID IN (SELECT ROWID FROM SpatialIndex WHERE f_table_name = 'noice' AND search_frame = ST_Buffer(ice_outline.GEOMETRY, 0.01)) AND noice.type = 'glacier') GROUP BY ice_outline.OGC_FID;
+INSERT INTO ice_outline2 ($EDGE_TYPE_ATTRIBUTE, GEOMETRY) SELECT '$EDGE_TYPE_ICE_ICE', CastToMultiLineString(ST_Intersection(ice_outline.GEOMETRY, ST_Union(ST_Buffer(noice.GEOMETRY, 0.01)))) FROM ice_outline JOIN noice ON (ST_Intersects(ice_outline.GEOMETRY, noice.GEOMETRY) AND noice.OGC_FID IN (SELECT ROWID FROM SpatialIndex WHERE f_table_name = 'noice' AND search_frame = ST_Buffer(ice_outline.GEOMETRY, 0.01)) AND noice.type = 'glacier') GROUP BY ice_outline.OGC_FID;
 DELETE FROM ice_outline;
 SELECT DisableSpatialIndex('ice_outline', 'GEOMETRY');
 DROP TABLE idx_ice_outline_GEOMETRY;
@@ -302,7 +311,7 @@ SELECT DiscardGeometryColumn('ice_outline', 'GEOMETRY');
 SELECT RecoverGeometryColumn('ice_outline', 'GEOMETRY', 3857, 'LINESTRING', 'XY');
 SELECT CreateSpatialIndex('ice_outline', 'GEOMETRY');
 .elemgeo ice_outline2 GEOMETRY ice_outline2_flat id_new id_old;
-INSERT INTO ice_outline (type, GEOMETRY) SELECT ice_outline2_flat.type, ice_outline2_flat.GEOMETRY FROM ice_outline2_flat WHERE ST_Length(GEOMETRY) > 0.01;
+INSERT INTO ice_outline ($EDGE_TYPE_ATTRIBUTE, GEOMETRY) SELECT ice_outline2_flat.$EDGE_TYPE_ATTRIBUTE, ice_outline2_flat.GEOMETRY FROM ice_outline2_flat WHERE ST_Length(GEOMETRY) > 0.01;
 DELETE FROM ice_outline2;
 SELECT DisableSpatialIndex('ice_outline2', 'GEOMETRY');
 DROP TABLE idx_ice_outline2_GEOMETRY;
