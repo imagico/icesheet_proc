@@ -25,7 +25,7 @@ CXXFLAGS_GEOS     := $(shell geos-config --cflags)
 CXXFLAGS_OGR      := $(shell gdal-config --cflags)
 CXXFLAGS_WARNINGS := -Wall -Wextra -Wdisabled-optimization -pedantic -Wctor-dtor-privacy -Wnon-virtual-dtor -Woverloaded-virtual -Wsign-promo -Wno-long-long
 
-LDFLAGS += -rdynamic -lprotobuf-lite -losmpbf -lz -lpthread -lexpat -lbz2 -lgdal
+LDFLAGS += -rdynamic -lz -lpthread -lexpat -lbz2 -lgdal
 
 .PHONY: all clean
 

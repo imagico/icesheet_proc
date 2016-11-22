@@ -40,47 +40,6 @@ fi
 
 #--------------------------------------------------------------------------
 
-gen_osmium_js()
-{
-	echo "var areas = Osmium.Output.Shapefile.open('$1', 'polygon');
-areas.add_field('id', 'integer', 12);
-areas.add_field('type', 'string', 30);
-
-Osmium.Callbacks.area = function() {
-
-	if (this.tags.natural == 'bare_rock')
-		areas.add(this.geom, {
-			id:   this.id,
-			type: 'bare_rock'
-		});
-	else if (this.tags.natural == 'scree')
-		areas.add(this.geom, {
-			id:   this.id,
-			type: 'scree'
-		});
-	else if (this.tags.natural == 'water')
-	{
-		if (this.tags.supraglacial != 'yes')
-			areas.add(this.geom, {
-				id:   this.id,
-				type: 'water'
-			});
-	}
-	else if (this.tags.natural == 'glacier')
-		areas.add(this.geom, {
-			id:   this.id,
-			type: 'glacier'
-		});
-}
-
-Osmium.Callbacks.end = function() {
-	areas.close();
-}" > "$2"
-
-}
-
-#--------------------------------------------------------------------------
-
 echo "icesheet_proc.sh - Antarctic icesheet processing"
 echo "------------------------------------------------"
 echo ""
@@ -220,10 +179,9 @@ fi
 if [ ! -r "$OSM_NOICE_BASE.db" ] && [ ! -r "$OSM_NOICE_BASE.shp" ] ; then
 	rm -f "$OSM_NOICE_BASE.shp" "$OSM_NOICE_BASE.shx" "$OSM_NOICE_BASE.dbf" "$OSM_NOICE_BASE.prj" "$OSM_NOICE_BASE.cpg" "$OSM_NOICE_BASE.db"
 	if [ -z "$OSMIUM_NOICE" ] ; then
-		echo "Converting OSM data with osmjs..."
-		gen_osmium_js "$OSM_NOICE_BASE" "noice.js"
-		osmjs -m -2 -l sparsetable -j "noice.js" "$OSM_NOICE"
-		rm -f "noice.js"
+		echo "osmium_noice is required by icesheet_proc.sh."
+		echo "the souce file and makefile should be included with this script."
+		exit
 	else
 		echo "Converting OSM data with osmium_noice..."
 		$OSMIUM_NOICE "$OSM_NOICE" "$OSM_NOICE_BASE.db"

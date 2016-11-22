@@ -13,6 +13,8 @@
 #include <iostream>
 #include <getopt.h>
 
+#include <gdalcpp.hpp>
+
 // usually you only need one or two of these
 #include <osmium/index/map/dummy.hpp>
 #include <osmium/index/map/sparse_mem_array.hpp>
@@ -28,90 +30,37 @@
 #include <osmium/io/any_input.hpp>
 #include <osmium/handler.hpp>
 
-typedef osmium::index::map::Dummy<osmium::unsigned_object_id_type, osmium::Location> index_neg_type;
+#include <osmium/index/node_locations_map.hpp>
 
-typedef osmium::index::map::SparseMemArray<osmium::unsigned_object_id_type, osmium::Location> index_pos_type;
+using index_type = osmium::index::map::SparseMemArray<osmium::unsigned_object_id_type, osmium::Location>;
 
-typedef osmium::handler::NodeLocationsForWays<index_pos_type, index_neg_type> location_handler_type;
+using location_handler_type = osmium::handler::NodeLocationsForWays<index_type>;
 
+REGISTER_MAP(osmium::unsigned_object_id_type, osmium::Location, osmium::index::map::Dummy, none)
+
+template <class TProjection>
 class MyOGRHandler : public osmium::handler::Handler {
 
-    OGRDataSource* m_data_source;
-    OGRLayer* m_layer_polygon;
+    gdalcpp::Layer m_layer_polygon;
+    osmium::geom::OGRFactory<TProjection>& m_factory;
 
     size_t feature_count_noice;
     size_t feature_count_glacier;
 
-    // Choose one of the following:
-
-    // 1. Use WGS84, do not project coordinates.
-    osmium::geom::OGRFactory<> m_factory {};
-
-    // 2. Project coordinates into "Web Mercator".
-    //osmium::geom::OGRFactory<osmium::geom::MercatorProjection> m_factory;
-
-    // 3. Use any projection that the proj library can handle.
-    //    (Initialize projection with EPSG code or proj string).
-    //    In addition you need to link with "-lproj" and add
-    //    #include <osmium/geom/projection.hpp>.
-    //osmium::geom::OGRFactory<osmium::geom::Projection> m_factory {osmium::geom::Projection(4326)};
-
 public:
 
-    MyOGRHandler(const std::string& driver_name, const std::string& filename) {
+    MyOGRHandler(gdalcpp::Dataset& dataset, osmium::geom::OGRFactory<TProjection>& factory) :
+        m_layer_polygon(dataset, "noice", wkbMultiPolygon),
+        m_factory(factory) {
 
-        OGRRegisterAll();
-
-        OGRSFDriver* driver = OGRSFDriverRegistrar::GetRegistrar()->GetDriverByName(driver_name.c_str());
-        if (!driver) {
-            std::cerr << driver_name << " driver not available.\n";
-            exit(1);
-        }
-
-        CPLSetConfigOption("OGR_SQLITE_SYNCHRONOUS", "FALSE");
-        const char* options[] = { "SPATIALITE=TRUE", "INIT_WITH_EPSG=no", nullptr };
-        m_data_source = driver->CreateDataSource(filename.c_str(), const_cast<char**>(options));
-        if (!m_data_source) {
-            std::cerr << "Creation of output file failed.\n";
-            exit(1);
-        }
-
-        OGRSpatialReference sparef;
-        sparef.importFromProj4(m_factory.proj_string().c_str());
-
-        m_layer_polygon = m_data_source->CreateLayer("noice", &sparef, wkbMultiPolygon, nullptr);
-        if (!m_layer_polygon) {
-            std::cerr << "Layer creation failed.\n";
-            exit(1);
-        }
-
-        OGRFieldDefn layer_polygon_field_id("id", OFTInteger);
-        layer_polygon_field_id.SetWidth(10);
-
-        if (m_layer_polygon->CreateField(&layer_polygon_field_id) != OGRERR_NONE) {
-            std::cerr << "Creating id field failed.\n";
-            exit(1);
-        }
-
-        OGRFieldDefn layer_polygon_field_type("type", OFTString);
-        layer_polygon_field_type.SetWidth(30);
-
-        if (m_layer_polygon->CreateField(&layer_polygon_field_type) != OGRERR_NONE) {
-            std::cerr << "Creating type field failed.\n";
-            exit(1);
-        }
-
-        m_layer_polygon->StartTransaction();
+        m_layer_polygon.add_field("id", OFTReal, 10);
+        m_layer_polygon.add_field("type", OFTString, 30);
 
         feature_count_noice = 0;
         feature_count_glacier = 0;
     }
 
     ~MyOGRHandler() {
-        m_layer_polygon->CommitTransaction();
-        OGRDataSource::DestroyDataSource(m_data_source);
-        OGRCleanupAll();
-
         std::cout << "noice features converted: " << feature_count_noice << "\n";
         std::cout << "glacier features converted: " << feature_count_glacier << "\n";
     }
@@ -119,41 +68,34 @@ public:
     void area(const osmium::Area& area) {
         const char* natural = area.tags()["natural"];
         if (natural) {
-	  if (!strcmp(natural, "bare_rock") ||
-	    !strcmp(natural, "scree") ||
-	    !strcmp(natural, "glacier") ||
-	    !strcmp(natural, "water"))
-	  {
-	    if (!strcmp(natural, "water"))
-	    {
-	      const char* supraglacial = area.tags()["supraglacial"];
-	      if (supraglacial)
-		if (!strcmp(supraglacial, "yes")) return;
-	    }
+          // skip all areas that can exist on a glacier
+          if (!strcmp(natural, "cliff") ||
+              !strcmp(natural, "sinkhole") ||
+              !strcmp(natural, "cave_entrance") ||
+              !strcmp(natural, "crevasse") ||
+              !strcmp(natural, "dune") ||
+              !strcmp(natural, "desert") ||
+              !strcmp(natural, "valley") ||
+              !strcmp(natural, "volcano"))
+            return;
 
-            try {
-                std::unique_ptr<OGRMultiPolygon> ogr_polygon = m_factory.create_multipolygon(area);
-                OGRFeature* feature = OGRFeature::CreateFeature(m_layer_polygon->GetLayerDefn());
-                feature->SetGeometry(ogr_polygon.get());
-                feature->SetField("id", static_cast<int>(area.id()));
+          const char* supraglacial = area.tags()["supraglacial"];
+          if (supraglacial)
+            if (!strcmp(supraglacial, "yes")) return;
 
-                feature->SetField("type", natural);
-
-                if (m_layer_polygon->CreateFeature(feature) != OGRERR_NONE) {
-                    std::cerr << "Failed to create feature.\n";
-                    exit(1);
-                }
+          try {
+                gdalcpp::Feature feature(m_layer_polygon, m_factory.create_multipolygon(area));
+                feature.set_field("id", static_cast<double>(area.id()));
+                feature.set_field("type", natural);
+                feature.add_to_layer();
 
                 if (!strcmp(natural, "glacier"))
                     feature_count_glacier++;
                 else
                     feature_count_noice++;
-
-                OGRFeature::DestroyFeature(feature);
-            } catch (osmium::geometry_error&) {
+          } catch (osmium::geometry_error&) {
                 std::cerr << "Ignoring illegal geometry for area " << area.id() << " created from " << (area.from_way() ? "way" : "relation") << " with id=" << area.orig_id() << ".\n";
-            }
-	  }
+          }
         }
     }
 
@@ -179,7 +121,7 @@ int main(int argc, char* argv[]) {
         {0, 0, 0, 0}
     };
 
-    std::string output_format("SQLite");
+    std::string output_format{"SQLite"};
     bool debug = false;
 
     while (true) {
@@ -204,7 +146,7 @@ int main(int argc, char* argv[]) {
     }
 
     std::string input_filename;
-    std::string output_filename("ogr_out");
+    std::string output_filename{"ogr_out"};
     int remaining_args = argc - optind;
     if (remaining_args > 2) {
         std::cerr << "Usage: " << argv[0] << " [OPTIONS] [INFILE [OUTFILE]]" << std::endl;
@@ -219,24 +161,41 @@ int main(int argc, char* argv[]) {
     }
 
     osmium::area::Assembler::config_type assembler_config;
-    assembler_config.enable_debug_output(debug);
-    osmium::area::MultipolygonCollector<osmium::area::Assembler> collector(assembler_config);
+    if (debug) {
+        assembler_config.debug_level = 1;
+    }
+    osmium::area::MultipolygonCollector<osmium::area::Assembler> collector{assembler_config};
 
     std::cerr << "Pass 1...\n";
-    osmium::io::Reader reader1(input_filename);
+    osmium::io::Reader reader1{input_filename};
     collector.read_relations(reader1);
     reader1.close();
     std::cerr << "Pass 1 done\n";
 
-    index_pos_type index_pos;
-    index_neg_type index_neg;
-    location_handler_type location_handler(index_pos, index_neg);
+    index_type index;
+    location_handler_type location_handler{index};
     location_handler.ignore_errors();
 
-    MyOGRHandler ogr_handler(output_format, output_filename);
+    // Choose one of the following:
+
+    // 1. Use WGS84, do not project coordinates.
+    osmium::geom::OGRFactory<> factory {};
+
+    // 2. Project coordinates into "Web Mercator".
+    //osmium::geom::OGRFactory<osmium::geom::MercatorProjection> factory;
+
+    // 3. Use any projection that the proj library can handle.
+    //    (Initialize projection with EPSG code or proj string).
+    //    In addition you need to link with "-lproj" and add
+    //    #include <osmium/geom/projection.hpp>.
+    //osmium::geom::OGRFactory<osmium::geom::Projection> factory {osmium::geom::Projection(3857)};
+
+    CPLSetConfigOption("OGR_SQLITE_SYNCHRONOUS", "OFF");
+    gdalcpp::Dataset dataset{output_format, output_filename, gdalcpp::SRS{factory.proj_string()}, { "SPATIALITE=TRUE", "INIT_WITH_EPSG=no" }};
+    MyOGRHandler<decltype(factory)::projection_type> ogr_handler{dataset, factory};
 
     std::cerr << "Pass 2...\n";
-    osmium::io::Reader reader2(input_filename);
+    osmium::io::Reader reader2{input_filename};
 
     osmium::apply(reader2, location_handler, ogr_handler, collector.handler([&ogr_handler](const osmium::memory::Buffer& area_buffer) {
         osmium::apply(area_buffer, ogr_handler);
@@ -253,7 +212,4 @@ int main(int argc, char* argv[]) {
         }
         std::cerr << "\n";
     }
-
-    google::protobuf::ShutdownProtobufLibrary();
 }
-

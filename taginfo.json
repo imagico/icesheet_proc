@@ -1,0 +1,79 @@
+{
+    "data_format": 1,
+    "data_url": "https://raw.githubusercontent.com/imagico/icesheet_proc/master/taginfo.json",
+    "project": {
+        "name": "Antarctic icesheet processing",
+        "description": "OpenStreetMapData.com Antarctic icesheet processing to handle the specific Antarctic tagging conventions for map rendering",
+        "project_url": "http://openstreetmapdata.com/processing/icesheet",
+        "doc_url": "https://github.com/imagico/icesheet_proc",
+        "contact_name": "Christoph Hormann",
+        "contact_email": "chris_hormann@gmx.de"
+    },
+    "tags": [
+        { 
+            "key": "natural",
+            "object_types": [ "area" ],
+            "description": "Areas that by default are not ice covered south of -60 degrees latitude."
+        },
+        {
+            "key": "natural",
+            "value": "cliff",
+            "object_types": [ "area" ],
+            "description": "Area that does not indicate missing ice cover."
+        },
+        {
+            "key": "natural",
+            "value": "sinkhole",
+            "object_types": [ "area" ],
+            "description": "Area that does not indicate missing ice cover."
+        },
+        {
+            "key": "natural",
+            "value": "cave_entrance",
+            "object_types": [ "area" ],
+            "description": "Area that does not indicate missing ice cover."
+        },
+        {
+            "key": "natural",
+            "value": "crevasse",
+            "object_types": [ "area" ],
+            "description": "Area that does not indicate missing ice cover."
+        },
+        {
+            "key": "natural",
+            "value": "dune",
+            "object_types": [ "area" ],
+            "description": "Area that does not indicate missing ice cover."
+        },
+        {
+            "key": "natural",
+            "value": "desert",
+            "object_types": [ "area" ],
+            "description": "Area that does not indicate missing ice cover."
+        },
+        {
+            "key": "natural",
+            "value": "valley",
+            "object_types": [ "area" ],
+            "description": "Area that does not indicate missing ice cover."
+        },
+        {
+            "key": "natural",
+            "value": "volcano",
+            "object_types": [ "area" ],
+            "description": "Area that does not indicate missing ice cover."
+        },
+        {
+            "key": "supraglacial",
+            "value": "yes",
+            "object_types": [ "area" ],
+            "description": "Area that does not indicate missing ice cover."
+        },
+        {
+            "key": "natural",
+            "value": "glacier",
+            "object_types": [ "area" ],
+            "description": "Explicitly mapped glacier."
+        }
+    ]
+}
