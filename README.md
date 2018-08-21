@@ -15,7 +15,7 @@ Invoke the script in an empty directory and it will download all needed data and
 * if a file ending on `.sqlite` or `.db` already exists in the current directory it will assume this to be an [OSMCoastline](https://github.com/joto/osmcoastline) generated spatialite db and use it.
 * it takes a single optional parameter to specify the OSM data source.  Either `overpass` (default), `geofabrik` or the name of an existing OSM file.
 
-If you do not have osmjs installed (which relies on the old osmium library which is deprecated) you need to build the included `osmium_noice` before using the script.  Check the included makefile for further dependencies for doing this.
+You need to build the included `osmium_noice` before using the script.  Check the included [Makefile](Makefile) for further dependencies for doing this.
 
 Generated files
 ---------------
