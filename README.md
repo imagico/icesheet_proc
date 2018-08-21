@@ -3,7 +3,7 @@ OSM antarctic icesheet preprocessing script
 ===========================================
 
 This repository contains a bash script that generates shapefiles for use in map rendering
-of the glaciated parts of the [Antarctic continent](http://en.wikipedia.org/wiki/Antarctica) based on [OpenStreetMap](http://www.openstreetmap.org/) data.
+of the glaciated parts of the [Antarctic continent](https://en.wikipedia.org/wiki/Antarctica) based on [OpenStreetMap](https://www.openstreetmap.org/) data.
 
 The results of this processing can also be found [here](http://openstreetmapdata.com/data/icesheet)
 
@@ -30,11 +30,11 @@ Dependencies
 
 requires the following to operate:
 
-* [wget](http://www.gnu.org/software/wget/)
-* [osmconvert](http://wiki.openstreetmap.org/wiki/Osmconvert) (when a planet file is used as source)
+* [wget](https://www.gnu.org/software/wget/)
+* [osmconvert](https://wiki.openstreetmap.org/wiki/Osmconvert) (when a planet file is used as source)
 * [libosmium](https://github.com/osmcode/libosmium) to build the included `osmium_noice` tool
-* [GDAL/OGR](http://www.gdal.org/index.html)
-* [spatialite](http://www.gaia-gis.it/gaia-sins/)
+* [GDAL/OGR](https://www.gdal.org/index.html)
+* [spatialite](https://www.gaia-gis.it/gaia-sins/)
 
 
 Legal stuff
