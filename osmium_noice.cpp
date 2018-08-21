@@ -49,7 +49,7 @@ public:
         m_layer_polygon(dataset, "noice", wkbMultiPolygon),
         m_factory(factory) {
 
-        m_layer_polygon.add_field("id", OFTReal, 10);
+        m_layer_polygon.add_field("id", OFTInteger, 10);
         m_layer_polygon.add_field("type", OFTString, 30);
     }
 
