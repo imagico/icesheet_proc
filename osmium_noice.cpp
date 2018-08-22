@@ -65,6 +65,7 @@ public:
         }
 
         // skip all areas that can exist on a glacier
+        // also ignore coastline tagging (since this is no area tag)
         if (!std::strcmp(natural, "cliff") ||
                 !std::strcmp(natural, "sinkhole") ||
                 !std::strcmp(natural, "cave_entrance") ||
@@ -72,7 +73,8 @@ public:
                 !std::strcmp(natural, "dune") ||
                 !std::strcmp(natural, "desert") ||
                 !std::strcmp(natural, "valley") ||
-                !std::strcmp(natural, "volcano")) {
+                !std::strcmp(natural, "volcano") ||
+                !std::strcmp(natural, "coastline")) {
             return;
         }
 

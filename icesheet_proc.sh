@@ -20,9 +20,11 @@
 #
 #--------------------------------------------------------------------------
 
-#OSM_SOURCE="geofabrik"
-OSM_SOURCE="overpass"
-#OSM_SOURCE="path/to/planet.osm"
+if [ -z "$OSM_SOURCE" ] ; then
+	OSM_SOURCE="geofabrik"
+	#OSM_SOURCE="overpass"
+	#OSM_SOURCE="path/to/planet.osm"
+fi
 
 DB="antarctica_icesheet.db"
 OSM_NOICE="osm_noice_antarctica.osm.pbf"
@@ -143,9 +145,7 @@ if [ ! -r "$OSM_NOICE" ] ; then
 	if [ "$OSM_SOURCE" = "geofabrik" ] ; then
 
 		echo "Downloading antarctica data from download.geofabrik.de..."
-		test -r "$OSM_NOICE.bz2" || wget -O "$OSM_NOICE.bz2" "http://download.geofabrik.de/antarctica-latest.osm.bz2"
-
-		bunzip2 -c "$OSM_NOICE.bz2" > "$OSM_NOICE"
+		test -r "$OSM_NOICE" || wget -O "$OSM_NOICE" "http://download.geofabrik.de/antarctica-latest.osm.pbf"
 
 	elif [ "$OSM_SOURCE" = "overpass" ] ; then
 
@@ -155,7 +155,8 @@ if [ ! -r "$OSM_NOICE" ] ; then
 	elif [ -r "$OSM_SOURCE" ] ; then
 
 		echo "Extracting antarctica data from $OSM_SOURCE..."
-		osmconvert "$OSM_SOURCE" --out-pbf -b=-180,-90,180,-60 -o="$OSM_NOICE"
+		#osmconvert "$OSM_SOURCE" --out-pbf -b=-180,-90,180,-60 -o="$OSM_NOICE"
+		osmium extract -b -180,-90,180,-60 "$OSM_SOURCE" -o "$OSM_NOICE"
 
 	else
 		echo "'$OSM_SOURCE' could not be read - specify a different source for OSM data."
