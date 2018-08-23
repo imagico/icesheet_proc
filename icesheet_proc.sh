@@ -181,7 +181,7 @@ if [ ! -r "$OSM_NOICE_BASE.db" ] && [ ! -r "$OSM_NOICE_BASE.shp" ] ; then
 	rm -f "$OSM_NOICE_BASE.shp" "$OSM_NOICE_BASE.shx" "$OSM_NOICE_BASE.dbf" "$OSM_NOICE_BASE.prj" "$OSM_NOICE_BASE.cpg" "$OSM_NOICE_BASE.db"
 	if [ -z "$OSMIUM_NOICE" ] ; then
 		echo "osmium_noice is required by icesheet_proc.sh."
-		echo "the souce file and makefile should be included with this script."
+		echo "the source file and makefile should be included with this script."
 		exit
 	else
 		echo "Converting OSM data with osmium_noice..."
