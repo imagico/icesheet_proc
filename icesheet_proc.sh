@@ -238,7 +238,7 @@ INSERT INTO noice_outline (oid, iteration, GEOMETRY) SELECT noice_outline.oid, (
 SELECT COUNT(*) FROM noice_outline WHERE ST_Length(noice_outline.GEOMETRY) > $SPLIT_SIZE AND noice_outline.iteration = ($CNT + 1);" | spatialite -batch -bail -echo "$DB" | tail -n 1 > "cnt.txt"
 	XCNT=`cat cnt.txt | xargs`
 	echo "--- iteration $CNT ($XCNT) ---"
-	CNT=`expr $CNT + 1`
+	CNT=$((CNT + 1))
 done
 
 rm -f "cnt.txt"
@@ -298,11 +298,11 @@ date $iso_date
 
 SEND=`date +%s`
 
-DURATION_DL=`expr $SEND_DL - $SSTART`
-DURATION_DL_MIN=`expr $DURATION_DL / 60`
+DURATION_DL=$((SEND_DL - SSTART))
+DURATION_DL_MIN=$((DURATION_DL / 60))
 
-DURATION=`expr $SEND - $SEND_DL`
-DURATION_MIN=`expr $DURATION / 60`
+DURATION=$((SEND - SEND_DL))
+DURATION_MIN=$((DURATION / 60))
 
 echo ""
 echo "download/conversion time: $DURATION_DL seconds ($DURATION_DL_MIN minutes)"
