@@ -31,8 +31,8 @@ Dependencies
 requires the following to operate:
 
 * [wget](https://www.gnu.org/software/wget/)
-* [osmconvert](https://wiki.openstreetmap.org/wiki/Osmconvert) (when a planet file is used as source)
-* [libosmium](https://github.com/osmcode/libosmium) to build the included `osmium_noice` tool
+* [osmium-tool](https://osmcode.org/osmium-tool) (when a planet file is used as source)
+* [libosmium](https://osmcode.org/libosmium) to build the included `osmium_noice` tool
 * [GDAL/OGR](https://www.gdal.org/index.html)
 * [spatialite](https://www.gaia-gis.it/gaia-sins/)
 
