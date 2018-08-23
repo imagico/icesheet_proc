@@ -42,6 +42,8 @@ fi
 
 #--------------------------------------------------------------------------
 
+iso_date='+%Y-%m-%dT%H:%M:%S'
+
 echo "icesheet_proc.sh - Antarctic icesheet processing"
 echo "------------------------------------------------"
 echo ""
@@ -202,6 +204,7 @@ SEND_DL=`date +%s`
 echo "Adding non-icesheet data to db..."
 ogr2ogr --config OGR_SQLITE_SYNCHRONOUS OFF -f "SQLite" -gt 65535 -s_srs "EPSG:4326" -t_srs "EPSG:3857" -skipfailures -explodecollections -spat -180 -85.05113 180 -60 -update -append "$DB" "$OSM_NOICE_SOURCE" -nln "noice" -nlt "POLYGON"
 
+date $iso_date
 echo "Running spatialite processing (first part)..."
 
 echo "CREATE TABLE ice ( OGC_FID INTEGER PRIMARY KEY AUTOINCREMENT );
@@ -224,6 +227,7 @@ INSERT INTO noice_outline (oid, iteration, GEOMETRY) SELECT noice_outline_split.
 SELECT DiscardGeometryColumn('noice_outline_split', 'GEOMETRY');DROP TABLE noice_outline_split;" | spatialite -batch -bail -echo "$DB"
 
 
+date $iso_date
 echo "Iterating outline splitting..."
 
 CNT=1
@@ -239,6 +243,7 @@ done
 
 rm -f "cnt.txt"
 
+date $iso_date
 echo "Running spatialite processing (second part)..."
 
 echo "DELETE FROM noice_outline WHERE ST_Length(noice_outline.GEOMETRY) > $SPLIT_SIZE;VACUUM;
@@ -250,18 +255,18 @@ SELECT AddGeometryColumn('ice_outline2', 'GEOMETRY', 3857, 'MULTILINESTRING', 'X
 SELECT CreateSpatialIndex('ice_outline2', 'GEOMETRY');
 UPDATE water_polygons SET GEOMETRY = ST_Buffer(GEOMETRY,0.01);
 REPLACE INTO noice_outline (OGC_FID, oid, GEOMETRY) SELECT noice_outline.OGC_FID, noice_outline.oid, CastToMultiLineString(ST_Difference(noice_outline.GEOMETRY, ST_Union(water_polygons.GEOMETRY))) FROM noice_outline JOIN water_polygons ON (ST_Intersects(noice_outline.GEOMETRY, water_polygons.GEOMETRY) AND water_polygons.OGC_FID IN (SELECT ROWID FROM SpatialIndex WHERE f_table_name = 'water_polygons' AND search_frame = noice_outline.GEOMETRY)) GROUP BY noice_outline.OGC_FID;
-SELECT 'step 1';
+SELECT 'step 1', datetime('now');
 REPLACE INTO noice_outline (OGC_FID, oid, GEOMETRY) SELECT noice_outline.OGC_FID, noice_outline.oid, CastToMultiLineString(ST_Difference(noice_outline.GEOMETRY, ST_Union(noice.GEOMETRY))) FROM noice_outline JOIN noice ON (ST_Intersects(noice_outline.GEOMETRY, noice.GEOMETRY) AND noice.OGC_FID IN (SELECT ROWID FROM SpatialIndex WHERE f_table_name = 'noice' AND search_frame = noice_outline.GEOMETRY) AND noice.OGC_FID <> noice_outline.oid) GROUP BY noice_outline.OGC_FID;
 DELETE FROM noice_outline WHERE ST_Length(GEOMETRY) < 0.01 OR GEOMETRY IS NULL;
 DELETE FROM ice_outline;
 INSERT INTO ice_outline (OGC_FID, $EDGE_TYPE_ATTRIBUTE, GEOMETRY) SELECT $COASTLINE_LAYER.OGC_FID, '$EDGE_TYPE_ICE_OCEAN', CastToMultiLineString($COASTLINE_LAYER.GEOMETRY) FROM $COASTLINE_LAYER;
-SELECT 'step 2';
+SELECT 'step 2', datetime('now');
 REPLACE INTO ice_outline (OGC_FID, $EDGE_TYPE_ATTRIBUTE, GEOMETRY) SELECT ice_outline.OGC_FID, '$EDGE_TYPE_ICE_OCEAN', CastToMultiLineString(ST_Difference(ice_outline.GEOMETRY, ST_Union(ST_Buffer(noice.GEOMETRY, 0.01)))) FROM ice_outline JOIN noice ON (ST_Intersects(ice_outline.GEOMETRY, noice.GEOMETRY) AND noice.OGC_FID IN (SELECT ROWID FROM SpatialIndex WHERE f_table_name = 'noice' AND search_frame = ST_Buffer(ice_outline.GEOMETRY, 0.01))) GROUP BY ice_outline.OGC_FID;
 INSERT INTO ice_outline ($EDGE_TYPE_ATTRIBUTE, GEOMETRY) SELECT '$EDGE_TYPE_ICE_LAND', noice_outline.GEOMETRY FROM noice_outline;
 INSERT INTO ice_outline2 (OGC_FID, $EDGE_TYPE_ATTRIBUTE, GEOMETRY) SELECT OGC_FID, $EDGE_TYPE_ATTRIBUTE, GEOMETRY FROM ice_outline;
-SELECT 'step 3';
+SELECT 'step 3', datetime('now');
 REPLACE INTO ice_outline2 (OGC_FID, $EDGE_TYPE_ATTRIBUTE, GEOMETRY) SELECT ice_outline2.OGC_FID, '$EDGE_TYPE_ICE_LAND', CastToMultiLineString(ST_Difference(ice_outline2.GEOMETRY, ST_Union(ST_Buffer(noice.GEOMETRY, 0.01)))) FROM ice_outline2 JOIN noice ON (ST_Intersects(ice_outline2.GEOMETRY, noice.GEOMETRY) AND noice.OGC_FID IN (SELECT ROWID FROM SpatialIndex WHERE f_table_name = 'noice' AND search_frame = ST_Buffer(ice_outline2.GEOMETRY, 0.01)) AND noice.type = 'glacier') GROUP BY ice_outline2.OGC_FID;
-SELECT 'step 4';
+SELECT 'step 4', datetime('now');
 INSERT INTO ice_outline2 ($EDGE_TYPE_ATTRIBUTE, GEOMETRY) SELECT '$EDGE_TYPE_ICE_ICE', CastToMultiLineString(ST_Intersection(ice_outline.GEOMETRY, ST_Union(ST_Buffer(noice.GEOMETRY, 0.01)))) FROM ice_outline JOIN noice ON (ST_Intersects(ice_outline.GEOMETRY, noice.GEOMETRY) AND noice.OGC_FID IN (SELECT ROWID FROM SpatialIndex WHERE f_table_name = 'noice' AND search_frame = ST_Buffer(ice_outline.GEOMETRY, 0.01)) AND noice.type = 'glacier') GROUP BY ice_outline.OGC_FID;
 DELETE FROM ice_outline;
 SELECT DisableSpatialIndex('ice_outline', 'GEOMETRY');
@@ -283,10 +288,13 @@ mkdir "antarctica-icesheet-outlines-3857"
 rm -rf "antarctica-icesheet-polygons-3857"
 mkdir "antarctica-icesheet-polygons-3857"
 
+date $iso_date
 echo "Converting results to shapefiles..."
 
 ogr2ogr -s_srs "EPSG:3857" -t_srs "EPSG:3857" -skipfailures -explodecollections -spat -20037508.342789244 -20037508.342789244 20037508.342789244 -8300000 -clipsrc spat_extent "antarctica-icesheet-polygons-3857/icesheet_polygons.shp" "$DB" "ice" -nln "icesheet_polygons" -nlt "POLYGON"
 ogr2ogr -s_srs "EPSG:3857" -t_srs "EPSG:3857" -skipfailures -explodecollections -spat -20037508.342789244 -20037508.342789244 20037508.342789244 -8300000 -clipsrc spat_extent "antarctica-icesheet-outlines-3857/icesheet_outlines.shp" "$DB" "ice_outline" -nln "icesheet_outlines" -nlt "LINESTRING"
+
+date $iso_date
 
 SEND=`date +%s`
 
