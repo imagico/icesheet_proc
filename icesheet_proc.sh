@@ -72,6 +72,9 @@ OSM_NOICE_BASE=`basename "$OSM_NOICE" .osm.pbf`
 
 SSTART=`date +%s`
 
+# from here on: exit script if there is an error
+set -e
+
 # ===== coastline source data =====
 
 SOURCE_DB=`find . -maxdepth 1 -name "*.sqlite" -o -name "*.db" ! -name "$OSM_NOICE_BASE.db" | head -n 1`
