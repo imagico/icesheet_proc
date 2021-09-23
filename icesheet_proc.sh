@@ -90,13 +90,13 @@ if [ ! -z "$SOURCE_DB" ] ; then
 
 else
 
-	# download shapefiles from openstreetmapdata.com and reverse engineer spatialite db
+	# download shapefiles from osmdata.openstreetmap.de and reverse engineer spatialite db
 
-	echo "Downloading coastline data from openstreetmapdata.com..."
+	echo "Downloading coastline data from osmdata.openstreetmap.de..."
 
-	test -r "land-polygons-split-3857.zip" || wget -O "land-polygons-split-3857.zip" "http://data.openstreetmapdata.com/land-polygons-split-3857.zip"
-	test -r "water-polygons-split-3857.zip" || wget -O "water-polygons-split-3857.zip" "http://data.openstreetmapdata.com/water-polygons-split-3857.zip"
-	test -r "coastlines-split-3857.zip" || wget -O "coastlines-split-3857.zip" "http://data.openstreetmapdata.com/coastlines-split-3857.zip"
+	test -r "land-polygons-split-3857.zip" || wget -O "land-polygons-split-3857.zip" "https://osmdata.openstreetmap.de/download/land-polygons-split-3857.zip"
+	test -r "water-polygons-split-3857.zip" || wget -O "water-polygons-split-3857.zip" "https://osmdata.openstreetmap.de/download/water-polygons-split-3857.zip"
+	test -r "coastlines-split-3857.zip" || wget -O "coastlines-split-3857.zip" "https://osmdata.openstreetmap.de/download/coastlines-split-3857.zip"
 
 	echo "Unpacking coastline data..."
 
